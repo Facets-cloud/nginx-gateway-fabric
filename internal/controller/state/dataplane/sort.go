@@ -16,6 +16,36 @@ func sortMatchRules(matchRules []MatchRule) {
 	)
 }
 
+// sortPathRules sorts path rules for NGINX location ordering.
+// - Regex paths: sorted by descending length (more specific patterns first)
+// - Other paths: sorted alphabetically, then by PathType
+// This ensures deterministic ordering that is preserved after reconfiguration.
+func sortPathRules(pathRules []PathRule) {
+	sort.Slice(pathRules, func(i, j int) bool {
+		return pathRuleLess(pathRules[i], pathRules[j])
+	})
+}
+
+// pathRuleLess returns true if rule i should come before rule j in NGINX config.
+// For regex paths, longer patterns have higher priority (first match wins in NGINX).
+// For non-regex paths, alphabetical ordering is used for determinism.
+func pathRuleLess(i, j PathRule) bool {
+	// Both regex: sort by descending length (longer = higher priority)
+	if i.PathType == PathTypeRegularExpression && j.PathType == PathTypeRegularExpression {
+		if len(i.Path) != len(j.Path) {
+			return len(i.Path) > len(j.Path)
+		}
+		// Same length: alphabetical for deterministic ordering
+		return i.Path < j.Path
+	}
+
+	// Different path types or non-regex: alphabetical by path, then by type
+	if i.Path != j.Path {
+		return i.Path < j.Path
+	}
+	return i.PathType < j.PathType
+}
+
 /*
 Returns true if rule1 has a higher priority than rule2.
 
