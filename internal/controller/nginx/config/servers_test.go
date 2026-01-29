@@ -3347,6 +3347,68 @@ func TestCreateLocationsPath(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "regex paths preserve sorted order (longer patterns first)",
+			pathRules: []dataplane.PathRule{
+				// These are pre-sorted by descending length as they would be after sortPathRules
+				{
+					Path:     "^/perform_logout.*$",
+					PathType: dataplane.PathTypeRegularExpression,
+					MatchRules: []dataplane.MatchRule{
+						{
+							Match:        dataplane.Match{},
+							BackendGroup: fooGroup,
+						},
+					},
+				},
+				{
+					Path:     "^/perform.*$",
+					PathType: dataplane.PathTypeRegularExpression,
+					MatchRules: []dataplane.MatchRule{
+						{
+							Match:        dataplane.Match{},
+							BackendGroup: fooGroup,
+						},
+					},
+				},
+				{
+					Path:     "^/.*$",
+					PathType: dataplane.PathTypeRegularExpression,
+					MatchRules: []dataplane.MatchRule{
+						{
+							Match:        dataplane.Match{},
+							BackendGroup: fooGroup,
+						},
+					},
+				},
+			},
+			expLocations: []http.Location{
+				{
+					Path:            "~ ^/perform_logout.*$",
+					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxySetHeaders: httpBaseHeaders,
+					Type:            http.ExternalLocationType,
+				},
+				{
+					Path:            "~ ^/perform.*$",
+					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxySetHeaders: httpBaseHeaders,
+					Type:            http.ExternalLocationType,
+				},
+				{
+					Path:            "~ ^/.*$",
+					ProxyPass:       "http://test_foo_80$request_uri",
+					ProxySetHeaders: httpBaseHeaders,
+					Type:            http.ExternalLocationType,
+				},
+				{
+					Path: "= /",
+					Return: &http.Return{
+						Code: http.StatusNotFound,
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
