@@ -108,7 +108,7 @@ func (cs *commandService) CreateConnection(
 		ParentType: depType,
 		InstanceID: getNginxInstanceID(resource.GetInstances()),
 	}
-	// Generation is re-read by Subscribe via GetConnection (separate RPC), so it's discarded here.
+	// Track assigns a generation that Subscribe reads back to scope its cleanup (#5330).
 	cs.connTracker.Track(grpcInfo.UUID, conn)
 
 	return &pb.CreateConnectionResponse{
@@ -135,16 +135,14 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	if !ok {
 		return agentgrpc.ErrStatusInvalidConnection
 	}
-	// Generation-guarded cleanup: a stale reconnected stream can't delete the live entry (#5330).
-	generation := cs.connTracker.GetConnection(grpcInfo.UUID).Generation
-	defer cs.connTracker.RemoveConnection(grpcInfo.UUID, generation)
-
 	// wait for the agent to report itself and nginx
 	conn, deployment, err := cs.waitForConnection(ctx, grpcInfo)
 	if err != nil {
 		cs.logger.Error(err, "error waiting for connection", "uuid", grpcInfo.UUID)
 		return err
 	}
+	// Remove only this stream's connection, so a stale reconnect can't wipe the live entry (#5330).
+	defer cs.connTracker.RemoveConnection(grpcInfo.UUID, conn.Generation)
 	defer deployment.RemovePodStatus(grpcInfo.UUID)
 
 	cs.logger.Info(
